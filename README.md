@@ -1,16 +1,15 @@
 <h1 align="center">
-  <img src="resources/animal_behavior_repo_cover.png"><br/>Animal Behavior Inference Framework based on Smarter-Labelme
+  Animal Behavior Inference Framework based on Smarter-Labelme
+  <br/>
+  <img src="resources/animal_behavior_repo_cover.png"><br/>
 </h1>
 
-<h4 align="center">
-  Video / Image Annotation (Polygon, Semantic mask, Classification) with Python and Re3 and SSD-Multibox
-</h4>
-
-<br/>
 
 <div align="center">
   <img src="resources/labelme_screenshot.png" width="70%">
 </div>
+
+<br/>
 
 ## Description
 
