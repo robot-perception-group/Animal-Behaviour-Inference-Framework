@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="labelme/icons/icon.png"><br/>Smarter-labelme
+  <img src="resources/animal_behavior_repo_cover.png"><br/>Animal Behavior Inference Framework based on Smarter-Labelme
 </h1>
 
 <h4 align="center">
