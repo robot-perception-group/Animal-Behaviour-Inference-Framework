@@ -1,4 +1,4 @@
-![image](https://github.com/robot-perception-group/animal-behaviour-inference/assets/55254408/ef16fed1-360d-4b4b-b029-c5823d212caf)<h1 align="center">
+<h1 align="center">
   Animal Behavior Inference Framework based on Smarter-Labelme
   <br/>
   <img src="resources/animal_behavior_repo_cover.png"><br/>
