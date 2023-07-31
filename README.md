@@ -1,9 +1,12 @@
-<h1 align="center">
+![image](https://github.com/robot-perception-group/animal-behaviour-inference/assets/55254408/ef16fed1-360d-4b4b-b029-c5823d212caf)<h1 align="center">
   Animal Behavior Inference Framework based on Smarter-Labelme
   <br/>
   <img src="resources/animal_behavior_repo_cover.png"><br/>
 </h1>
 
+<h2 align="center">
+Welcome to the repo to perform fast, large-scale, semi-automatic inference of animal behavior from monocular videos.
+</h2>
 
 <div align="center">
   <img src="resources/labelme_screenshot.png" width="70%">
@@ -12,29 +15,21 @@
 <br/>
 
 ## Description
+The animal behavior inference workflow is built on top of the open-source graphical image annotation tool [Smarter-labelme](https://github.com/robot-perception-group/smarter-labelme) with the goal of minimizing the cumbersome and time-intensive 
+manual effort associated with generating reliable behavior-dense annotated datasets. The generated dataset can be easily used to train diverse machine learning models as well as to perform behavioral analysis.
 
-Smarter-labelme is a graphical image annotation tool for various image annotation needs such as classification, semantic segmentation, polygonal rois etc.  
-It support some smart features like object detection, annotation tracking, auto contouring etc. to speed up the annotation task.
-It is written in Python and uses Qt for its graphical interface.
+## Advantages
 
-<i>Auto tracking of polygons between frames with Re³ + SSD-Multibox</i>
-<img src="resources/Tracking.gif" width="70%" />   
+- [x] The workflow allows collecting dense behavior data over large time and spatial scales
+- [x] Enables researchers to quickly annotate animals and behaviors of interest to generate dense behavior and annotation datasets
+- [x] The underlying light-weight network architecture and implementation can be employed for real-time animal detection and behavior classification in the wild
+- [x] The workflow is built around videos from consumer-grade single cameras enabling easy adoption for reserach and conservation in the field
 
-<i>Auto contouring feature using OpenCV grab cut</i>
-<img src="resources/AutoContour.gif" width="70%" />   
+We demonstrate the benefits of using this workflow on aerial video footage of zebras recorded at Mpala in Kenya. The [full annotated dataset](https://keeper.mpdl.mpg.de/d/a9822e000aff4b5391e1/) is freely available for the research community.
 
-## Features
-
-- [x] Image annotation for polygon, rectangle, circle, line and point.
-- [x] Image flag annotation for classification and cleaning.
-- [x] Object-detection for automatic rectangle annotation.
-- [x] Auto-contouring for fast polygon annotation.
-- [x] Auto tracking to track and copy polygon annotations between frames.
-- [x] Scripts for semantic segmentation creation from polygonal annotations.
-- [x] Video annotation. 
-- [x] GUI customization (predefined labels / flags, auto-saving, label validation, etc).
-
+<!--
 A [Preprint outlining the methods](https://arxiv.org/abs/2302.09590) has been uploaded to [arXiv.org](https://arxiv.org/abs/2302.09590)
+-->
 
 ## Requirements
 
