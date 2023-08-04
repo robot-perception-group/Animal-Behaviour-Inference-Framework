@@ -1,7 +1,7 @@
 <h1 align="center">
   Animal Behavior Inference Framework based on Smarter-Labelme
   <br/>
-  <img src="resources/animal_behavior_repo_cover.png"><br/>
+  <img src="resources/animal_behavior_repo_cover2.png"><br/>
 </h1>
 
 <h2 align="center">
@@ -29,7 +29,13 @@ manual effort associated with generating reliable behavior-dense annotated datas
 
 We demonstrate the benefits of using this workflow on aerial video footage of zebras recorded at Mpala in Kenya. The [full annotated dataset](https://keeper.mpdl.mpg.de/d/a9822e000aff4b5391e1/) is freely available for the research community.
 
-A [Preprint outlining the framework](https://doi.org/10.1101/2023.07.31.551177) has been uploaded to bioRxiv
+
+A [Preprint outlining the framework](https://doi.org/10.1101/2023.07.31.551177) has been uploaded to bioRxiv and a video abstract can be found [here](https://www.youtube.com/watch?v=Zu-t0JJsz5o).
+
+<div align="center">
+  <img src="resources/auto_annotate_track.gif" width="80%">
+</div>
+
 
 ## Requirements
 
@@ -98,6 +104,20 @@ This repo is the fork of [bhavyaajani/smart-labelme](https://github.com/bhavyaaj
 ## Cite This Project
 
 If you use this project in your research or wish to refer to the baseline results published in the README, please use the following BibTeX entries.
+
+```bash
+@article{Price2023.07.31.551177,
+	author = {Eric Price and Pranav C. Khandelwal and Daniel I. Rubenstein and Aamir Ahmad},
+	title = {A Framework for Fast, Large-scale, Semi-Automatic Inference of Animal Behavior from Monocular Videos},
+	elocation-id = {2023.07.31.551177},
+	year = {2023},
+	doi = {10.1101/2023.07.31.551177},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177},
+	eprint = {https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177.full.pdf},
+	journal = {bioRxiv}
+}
+```
 
 ```bash
 @misc{price2023accelerated,
