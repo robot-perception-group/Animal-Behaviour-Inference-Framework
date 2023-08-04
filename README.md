@@ -8,9 +8,11 @@
 Welcome to the repo to perform fast, large-scale, semi-automatic inference of animal behavior from monocular videos.
 </h2>
 
+<!---
 <div align="center">
   <img src="resources/labelme_screenshot.png" width="70%">
 </div>
+--->
 
 <br/>
 
@@ -27,9 +29,7 @@ manual effort associated with generating reliable behavior-dense annotated datas
 
 We demonstrate the benefits of using this workflow on aerial video footage of zebras recorded at Mpala in Kenya. The [full annotated dataset](https://keeper.mpdl.mpg.de/d/a9822e000aff4b5391e1/) is freely available for the research community.
 
-<!--
-A [Preprint outlining the methods](https://arxiv.org/abs/2302.09590) has been uploaded to [arXiv.org](https://arxiv.org/abs/2302.09590)
--->
+A [Preprint outlining the framework](https://doi.org/10.1101/2023.07.31.551177) has been uploaded to bioRxiv
 
 ## Requirements
 
