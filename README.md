@@ -70,7 +70,7 @@ smarter_labelme  # just open gui
 ```
 ### Neural Network weights.
 
-Smarter-labelme will automatically download pretrained network weights via torch.hub on the first start. They will be cashed in your local user directory and use approximately 200 Mb of space. You can use your own weights instead with the --ssdmodel and --re3model flags.
+Smarter-labelme will automatically download pretrained network weights via torch.hub on the first start. They will be cashed in your local user directory and use approximately 200 Mb of space. You can use your own weights instead with the `--ssdmodel` and `--re3model` flags.
 
 ### Command Line Arguments
 - `--output` specifies the location that annotations will be written to. Annotations will be stored in this directory with a name that corresponds to the image that the annotation was made on.
