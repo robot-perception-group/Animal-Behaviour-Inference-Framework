@@ -32,6 +32,8 @@ We demonstrate the benefits of using this workflow on aerial video footage of ze
 
 A [Preprint outlining the framework](https://doi.org/10.1101/2023.07.31.551177) has been uploaded to bioRxiv and a video abstract can be found [here](https://www.youtube.com/watch?v=Zu-t0JJsz5o).
 
+**To adapt Smarter-labelme for your own project, please follow the guide [here](/howto/README.md)**.
+
 <div align="center">
   <img src="resources/auto_annotate_track.gif">
 </div>
