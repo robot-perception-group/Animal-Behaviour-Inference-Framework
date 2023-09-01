@@ -48,7 +48,7 @@ Once the training is complete, you can move on to Stream 2
 **Goal**: Leverage the animal detector to rapidly classify desired behaviors.\
 Note: At this point the detector should be able to track and generate bounding boxes for all animals of interest in each frame.
 
-1. Load Smarter-labelme with the trained weights from S1:
+1. Load Smarter-labelme with the trained weights from S1: \
 ```smarter_labelme --labelflags '{animal: ["behavior1","behavior2","behavior3","behavior4"]}' --ssdmodel ssd_animal.pt```\
 Note: In the above command, 'animal', 'behavior*', and 'ssd_animal' are place holders which should be replaced by you. The behaviors specified here will be the ones available to choose within Smarter-labelme
 2. Reopen the annotation folders that were used in S1 to rapidly generate bounding boxes for each animal in each frame. Ideally, this can now happen with you just moving frames forward or backward and not requiring manual input the correct the bounding boxes. Once bounding boxes are assigned for each animal across all frames, you can move to the next step. \
