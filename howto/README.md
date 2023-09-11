@@ -1,5 +1,5 @@
 <h1 align="center">
-  Adapting the Smarter-labelme workflow for your project
+  Adapting the Animal Behavior Inference Framework's Workflow for Your Project
   <br/>
   <img src="../resources/workflow_v1.svg"><br/>
 </h1>
