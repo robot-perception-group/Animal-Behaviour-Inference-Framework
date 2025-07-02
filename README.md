@@ -108,7 +108,7 @@ This repo is the fork of [bhavyaajani/smart-labelme](https://github.com/bhavyaaj
 If you use this project in your research or wish to refer to the baseline results published in the README, please use the following BibTeX entries.
 
 ```bash
-@article{Price2023.07.31.551177,
+@article{Price_et_al_2025,
 	author = {Eric Price and Pranav C. Khandelwal and Daniel I. Rubenstein and Aamir Ahmad},
 	title = {A Framework for Fast, Large-scale, Semi-Automatic Inference of Animal Behavior from Monocular Videos},
 	journal = {Methods in Ecology and Evolution},
