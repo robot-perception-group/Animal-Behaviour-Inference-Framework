@@ -29,6 +29,7 @@ from labelme.widgets import LabelListWidgetItem
 from labelme.widgets import ToolBar
 from labelme.widgets import UniqueLabelQListWidget
 from labelme.widgets import ZoomWidget
+from labelme.widgets import StepsizeWidget
 
 from labelme.trackerre3 import Tracker, trackerAutoAnnotate, trackerInit, trackerDetectFlags, trackerFindGlobalOffset
 
@@ -82,6 +83,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Whether we need to save or not.
         self.dirty = False
         self.image_skip = int(self._config['image_skip'])
+        self.autoMode = False
 
         self._noSelectionSlot = False
 
@@ -164,6 +166,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_dock.setWidget(fileListWidget)
 
         self.zoomWidget = ZoomWidget()
+        self.stepsizeWidget = StepsizeWidget(value=self.image_skip)
 
         self.canvas = self.labelList.canvas = Canvas(
             epsilon=self._config['epsilon'],
@@ -381,6 +384,12 @@ class MainWindow(QtWidgets.QMainWindow):
                         self.tr('Automatically annotate all object instances visible'),
                         enabled=False)
 
+        startStopAutoMode = action(self.tr('StartStopAutoMode'), self.startStopAutoMode,
+                        shortcuts['startStopAutoMode'], 'icon',
+                        self.tr('Automatically annotate the whole video'),
+                        enabled=False,
+                        checkable=True)
+
         undo = action(self.tr('Undo'), self.undoShapeEdit,
                       shortcuts['undo'], 'undo',
                       self.tr('Undo last add and edit of shape'),
@@ -414,6 +423,15 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         )
         self.zoomWidget.setEnabled(False)
+
+        stepsize = QtWidgets.QWidgetAction(self)
+        stepsize.setDefaultWidget(self.stepsizeWidget)
+        self.stepsizeWidget.setWhatsThis(
+            self.tr(
+                'Skip size for iteration through Image.'
+            )
+        )
+        self.stepsizeWidget.setEnabled(True)
 
         zoomIn = action(self.tr('Zoom &In'),
                         functools.partial(self.addZoom, 1.1),
@@ -504,6 +522,8 @@ class MainWindow(QtWidgets.QMainWindow):
             createLineStripMode=createLineStripMode,
             zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut, zoomOrg=zoomOrg,
             fitWindow=fitWindow, fitWidth=fitWidth,
+            startStopAutoMode=startStopAutoMode,
+            stepsize=stepsize,
             zoomActions=zoomActions,
             openNextImg=openNextImg, openPrevImg=openPrevImg, openseg=openseg,
             increase_blend=increase_blend, decrease_blend=decrease_blend,
@@ -553,6 +573,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 createLineStripMode,
                 editMode,
                 autoAnnotate,
+                startStopAutoMode,
             ),
             onShapesPresent=(saveAs, hideAll, showAll),
         )
@@ -652,6 +673,8 @@ class MainWindow(QtWidgets.QMainWindow):
             zoomOut,
             fitWindow,
             fitWidth,
+            startStopAutoMode,
+            stepsize,
         )
 
         self.statusBar().showMessage(self.tr('%s started.') % __appname__)
@@ -725,12 +748,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Callbacks:
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
+        self.stepsizeWidget.valueChanged.connect(self.stepsizeChanged)
 
         self.populateModeActions()
 
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
+        if self._config['auto_run']:
+            logger.info('Auto Run Engaged')
+            self.queueEvent(functools.partial(self.autoRun))
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
@@ -799,6 +826,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.createPointMode.setEnabled(True)
         self.actions.createLineStripMode.setEnabled(True)
         self.actions.autoAnnotate.setEnabled(True)
+        self.actions.startStopAutoMode.setEnabled(True)
         title = __appname__
         if self.filename is not None:
             title = '{} - {}'.format(title, self.filename)
@@ -1508,6 +1536,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 flags.update(self.labelFile.flags)
         self.loadFlags(flags)
 
+        if self.autoMode and self.tracker_dict and self._config['freeze_key_frames'] and len(self.canvas.shapes)>0:
+            #this frame has annotated labels - we treat it as a key frame and do not change it
+            self.stop_tracker()
+        if self.autoMode and self._config['freeze_key_frames'] and len(self.canvas.shapes)>0:
+            logger.info('Auto Run encountered keyframe %s'%self.filename)
+            selected_shapes=[]
+            for shape in self.canvas.shapes:
+                selected_shapes.append(shape)
+            self.canvas.selectShapes(selected_shapes)
+            self.start_tracker()
+
         if self.tracker_dict:
             otrack_shapes=[]
             for shape in prev_shapes:
@@ -2098,3 +2137,44 @@ class MainWindow(QtWidgets.QMainWindow):
         self.loadShapes(track_shapes, replace=False)
         self.setDirty()
 
+    def startStopAutoMode(self):
+        if self.autoMode:
+            self.actions.startStopAutoMode.setChecked(False)
+            self.autoMode = False
+            logger.info('Auto Run Stopped')
+        else:
+            if not self.mayContinue():
+                return
+            self.actions.startStopAutoMode.setChecked(True)
+            self.autoMode = True
+            logger.info('Auto Run Started')
+            self.queueEvent(functools.partial(self.autoStep))
+
+    def stepsizeChanged(self):
+        self.image_skip=int(self.stepsizeWidget.value())
+
+    def autoStep(self):
+        if self.autoMode:
+            if len(self.imageList) <= 0 or self.filename == self.imageList[-1]:
+                self.autoMode = False
+                self.actions.startStopAutoMode.setChecked(False)
+                if self._config['auto_run']:
+                      self.queueEvent(functools.partial(self.autoRunFin))
+
+            else:
+                logger.info('Auto Run: %s'%self.filename)
+                self._openNextImg(skip=self.image_skip)
+                self.queueEvent(functools.partial(self.autoStep))
+
+    def autoRun(self):
+        selected_shapes=[]
+        for shape in self.canvas.shapes:
+            selected_shapes.append(shape)
+        if len(selected_shapes):
+           self.canvas.selectShapes(selected_shapes)
+           self.actions.toggle_tracker.toggle()
+           self.start_tracker()
+        self.startStopAutoMode()
+
+    def autoRunFin(self):
+        self.close()
