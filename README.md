@@ -1,5 +1,5 @@
 <h1 align="center">
-  Animal Behavior Inference Framework based on Smarter-Labelme
+  A Framework for Fast, Large-scale, Semi-Automatic Inference of Animal Behavior from Monocular Videos
   <br/>
   <img src="resources/animal_behavior_repo_cover2.png"><br/>
 </h1>
