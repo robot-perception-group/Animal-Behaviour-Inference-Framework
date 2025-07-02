@@ -111,6 +111,21 @@ If you use this project in your research or wish to refer to the baseline result
 @article{Price2023.07.31.551177,
 	author = {Eric Price and Pranav C. Khandelwal and Daniel I. Rubenstein and Aamir Ahmad},
 	title = {A Framework for Fast, Large-scale, Semi-Automatic Inference of Animal Behavior from Monocular Videos},
+	journal = {Methods in Ecology and Evolution},
+	volume = {},
+	number = {},
+	pages = {},
+	keywords = {Animal behavior Inference, Drone based monitoring, Deep neural network based inference, Automatic labeling, Labelled aerial datasets},
+	doi = {},
+	url = {[https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.70056](https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177)},
+	eprint = {},
+	year = {2025},
+	comments={Accepted, 1st July 2025}
+}
+
+@article{Price2023.07.31.551177,
+	author = {Eric Price and Pranav C. Khandelwal and Daniel I. Rubenstein and Aamir Ahmad},
+	title = {A Framework for Fast, Large-scale, Semi-Automatic Inference of Animal Behavior from Monocular Videos},
 	elocation-id = {2023.07.31.551177},
 	year = {2023},
 	doi = {10.1101/2023.07.31.551177},
@@ -118,42 +133,5 @@ If you use this project in your research or wish to refer to the baseline result
 	URL = {https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177},
 	eprint = {https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177.full.pdf},
 	journal = {bioRxiv}
-}
-```
-
-```bash
-@misc{price2023accelerated,
-      title={Accelerated Video Annotation driven by Deep Detector and Tracker}, 
-      author={Eric Price and Aamir Ahmad},
-      year={2023},
-      eprint={2302.09590},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url = {https://arxiv.org/abs/2302.09590},
-}
-```
-```bash
-@misc{smarter-labelme2023,
-  author =       {Eric Price},
-  title =        {{Smarter-labelme: }},
-  howpublished = {\url{https://github.com/robot-perception-group/smarter-labelme}},
-  year =         {2023}
-}
-```
-```bash
-@misc{smart-labelme2020,
-  author =       {Bhavya Ajani},
-  title =        {{Smart-labelme: Video / Image Annotation (Polygon, Semantic mask, Classification) with Python}},
-  howpublished = {\url{https://github.com/bhavyaajani/smart-labelme}},
-  year =         {2020}
-}
-```
-
-```bash
-@misc{labelme2016,
-  author =       {Kentaro Wada},
-  title =        {{labelme: Image Polygonal Annotation with Python}},
-  howpublished = {\url{https://github.com/wkentaro/labelme}},
-  year =         {2016}
 }
 ```
