@@ -25,7 +25,7 @@ manual effort associated with generating reliable behavior-dense annotated datas
 - [x] The workflow allows collecting dense behavior data over large time and spatial scales
 - [x] Enables researchers to quickly annotate animals and behaviors of interest to generate dense behavior and annotation datasets
 - [x] The underlying light-weight network architecture and implementation can be employed for real-time animal detection and behavior classification in the wild
-- [x] The workflow is built around videos from consumer-grade single cameras enabling easy adoption for reserach and conservation in the field
+- [x] The workflow is built around videos from consumer-grade single cameras enabling easy adoption for research and conservation in the field
 
 We demonstrate the benefits of using this workflow on aerial video footage of zebras recorded at Mpala in Kenya. The [full annotated dataset](https://keeper.mpdl.mpg.de/d/a9822e000aff4b5391e1/) is freely available for the research community.
 
@@ -51,7 +51,7 @@ A [Preprint outlining the framework](https://doi.org/10.1101/2023.07.31.551177) 
 You can install via pip:
 
 ```bash
-python3 -m pip install --upgrade "git+https://github.com/robot-perception-group/smarter-labelme@master"
+python3 -m pip install --upgrade "git+https://github.com/robot-perception-group/Animal-Behaviour-Inference-Framework@master"
 ```
 
 ### Hint on Pytorch
@@ -151,4 +151,18 @@ If you use this project in your research or wish to refer to the baseline result
 	eprint = {https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177.full.pdf},
 	journal = {bioRxiv}
 }
+
+@InProceedings{10.1007/978-3-031-44981-9_12,
+   author="Price, Eric and Ahmad, Aamir",
+   editor="Lee, Soon-Geul et al.",
+   title="Accelerated Video Annotation Driven by Deep Detector and Tracker",
+   booktitle="Intelligent Autonomous Systems 18",
+   year="2024",
+   publisher="Springer Nature Switzerland",
+   address="Cham",
+   pages="141--153",
+   doi = {10.1007/978-3-031-44981-9_12},
+   isbn="978-3-031-44981-9"
+}
+```
 ```
