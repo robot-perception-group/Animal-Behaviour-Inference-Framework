@@ -117,7 +117,7 @@ Smarter-labelme will automatically download pretrained network weights via torch
 
 ## Acknowledgement
 
-This repo is the fork of [bhavyaajani/smart-labelme](https://github.com/bhavyaajani/smart-labelme).
+This repo is built on top of Smart-Labelme [bhavyaajani/smart-labelme](https://github.com/bhavyaajani/smart-labelme).
 
 
 ## Cite This Project
