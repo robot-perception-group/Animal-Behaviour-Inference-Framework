@@ -253,6 +253,7 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(newIcon('icon'))
+    app.setStyle("Fusion")
     app.installTranslator(translator)
     win = MainWindow(
         config=config,

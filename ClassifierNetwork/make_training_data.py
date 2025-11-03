@@ -161,7 +161,7 @@ def main():
                 if args.test_type=='id':
                     dset=idset[str(shape["label"])]
                 add(ids,shape["label"],1)
-                res=re.search("(.*)_[0-9]*$",shape["label"])
+                res=re.search("(.*)_[^_]*$",shape["label"])
                 if res:
                     tp=str(res[1])
                     add(classes,tp,1)
