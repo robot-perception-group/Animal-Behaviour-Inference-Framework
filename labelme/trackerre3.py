@@ -16,6 +16,14 @@ import labelme.utils.flagmodel as flagmodel
 import random
 from qtpy import QtCore
 
+# Optional YOLO11 (ultralytics) backend for auto-annotation
+try:
+    from ultralytics import YOLO as UltralyticsYOLO
+except Exception:
+    UltralyticsYOLO = None
+    logger.warn("Ultralytics YOLO not available. YOLO11 auto-annotation will be disabled.")
+
+
 MAX_TRACK_LENGTH = 16
 CROP_SIZE = 227
 CROP_PAD = 2
@@ -30,6 +38,10 @@ FLAGCLASS=None
 REFIMAGE=None
 CURIMAGE=None
 TRANSROTATION=None
+
+YOLO11NET = None
+YOLO11CLASS = ['background','person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']  # class names for YOLO11 (from ultralytics)
+
 
 def displayImage(image):
     #im2=(image*127+128).to(torch.uint8).cpu()
@@ -361,9 +373,71 @@ class SSD():
 
         return results
 
+def yolo11_findnew(image, min_conf=0.25, nms_iou=0.45):
+    """
+    Simple YOLO11-based detector that mimics the output format of SSD.findnew
+    for use by trackerAutoAnnotate.
+
+    Returns:
+        torch.Tensor of shape [N, 3, 2] with:
+          [class_id, score], [x1, y1], [x2, y2]
+        in image pixel coordinates.
+    """
+    global YOLO11NET, DEVICE
+
+    if YOLO11NET is None:
+        logger.warn("YOLO11NET is None - cannot run YOLO11 detection.")
+        # Empty tensor with correct shape
+        return torch.zeros((0, 3, 2), dtype=torch.float32)
+
+    # YOLO expects RGB
+    mimg_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    try:
+        if hasattr(YOLO11NET, "predict"):
+            results = YOLO11NET.predict(
+                mimg_rgb,
+                conf=min_conf,
+                iou=nms_iou,
+                verbose=False,
+            )
+        else:
+            # Older ultralytics API: __call__ triggers predict
+            results = YOLO11NET(mimg_rgb)
+    except TypeError:
+        # Some versions don't accept conf/iou in predict
+        results = YOLO11NET.predict(mimg_rgb, verbose=False)
+
+    if not results:
+        return torch.zeros((0, 3, 2), dtype=torch.float32)
+
+    res = results[0]
+    boxes = getattr(res, "boxes", None)
+    if boxes is None or len(boxes) == 0:
+        return torch.zeros((0, 3, 2), dtype=torch.float32)
+
+    xyxy = boxes.xyxy.cpu()   # [N,4]
+    scores = boxes.conf.cpu() # [N]
+    cls = boxes.cls.cpu()     # [N]
+
+    n = xyxy.shape[0]
+    out = torch.zeros((n, 3, 2), dtype=torch.float32)
+    # class id and score
+    out[:, 0, 0] = cls
+    out[:, 0, 1] = scores
+    # coords
+    out[:, 1, 0] = xyxy[:, 0]
+    out[:, 1, 1] = xyxy[:, 1]
+    out[:, 2, 0] = xyxy[:, 2]
+    out[:, 2, 1] = xyxy[:, 3]
+
+    return out
         
 def trackerInit(config):
     global SSDMULTIBOX,DEVICE,RE3MODEL,CONFIG,CLASSIFIER,FLAGCLASS
+    global YOLO11NET, YOLO11CLASS
+    yolo_weights = config.get("yolo11model", None)
+    
     #use a single instance of this, saves memory
     CONFIG=config
     if CONFIG['dnndevice'] is None:
@@ -391,6 +465,135 @@ def trackerInit(config):
         cs=CLASSIFIER.get_extra_state()
         for c in cs:
             FLAGCLASS.append(c)
+            
+    if UltralyticsYOLO is not None and yolo_weights is not None:
+        try:
+            logger.info("Initialising YOLO11 detector with weights '{}'".format(yolo_weights))
+            YOLO11NET = UltralyticsYOLO(yolo_weights)
+            # put model on same device as the other networks if possible
+            try:
+                YOLO11NET.to(str(DEVICE))
+            except Exception:
+                pass
+
+            # try to get class names
+            names = None
+            if hasattr(YOLO11NET, "names"):
+                names = YOLO11NET.names
+            elif hasattr(YOLO11NET, "model") and hasattr(YOLO11NET.model, "names"):
+                names = YOLO11NET.model.names
+            YOLO11CLASS = names
+        except Exception as ex:
+            logger.warn("Failed to initialise YOLO11 detector: {}. Using SSD only.".format(ex))
+            YOLO11NET = None
+            YOLO11CLASS = None
+    elif yolo_weights is not None and UltralyticsYOLO is None:
+        logger.warn("yolo11model specified but ultralytics is not installed. Using SSD only.")            
+
+def yolo11_correct_box(image, pbox, ref_bbox):
+    """
+    Use YOLO11 to refine the tracker box.
+
+    Args:
+        image: current BGR frame (H,W,3) as np.ndarray
+        pbox:  [x1, y1, x2, y2] from Re3 (float or int)
+        ref_bbox: reference bbox (e.g. from previous annotation) [x1,y1,x2,y2]
+
+    Returns:
+        list [x1,y1,x2,y2] if YOLO11 found a good match, otherwise None.
+    """
+    global YOLO11NET
+
+    if YOLO11NET is None:
+        return None
+
+    pbox = np.array(pbox, dtype=float)
+    ref_bbox = np.array(ref_bbox, dtype=float)
+
+    H, W = image.shape[0], image.shape[1]
+
+    # Compute crop around current predicted box (same logic as SSD.prepare)
+    w = pbox[2] - pbox[0]
+    h = pbox[3] - pbox[1]
+    x0 = pbox[0] + w / 2.0
+    y0 = pbox[1] + h / 2.0
+    d = h
+    if w > h:
+        d = w
+
+    crop_factor = float(CONFIG.get("ssd_track_crop_factor", 3.0))
+    x1 = x0 - d * crop_factor * 0.5
+    x2 = x0 + d * crop_factor * 0.5
+    y1 = y0 - d * crop_factor * 0.5
+    y2 = y0 + d * crop_factor * 0.5
+
+    x1, y1, x2, y2 = [int(a) if a >= 0 else 0 for a in [x1, y1, x2, y2]]
+    x1, x2 = [a if a <= W - 1 else W - 1 for a in [x1, x2]]
+    y1, y2 = [a if a <= H - 1 else H - 1 for a in [y1, y2]]
+
+    if x2 <= x1 or y2 <= y1:
+        return None
+
+    roi = image[y1:y2, x1:x2, :]
+    if roi.size == 0:
+        return None
+
+    # YOLO expects RGB
+    roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+
+    conf_thr = float(CONFIG.get("yolo11_conf_threshold", 0.25))
+    iou_nms = float(CONFIG.get("yolo11_iou_threshold", 0.45))
+
+    try:
+        if hasattr(YOLO11NET, "predict"):
+            results = YOLO11NET.predict(
+                roi_rgb,
+                conf=conf_thr,
+                iou=iou_nms,
+                verbose=False,
+            )
+        else:
+            results = YOLO11NET(roi_rgb)
+    except TypeError:
+        results = YOLO11NET.predict(roi_rgb, verbose=False)
+
+    if not results:
+        return None
+
+    res = results[0]
+    boxes = getattr(res, "boxes", None)
+    if boxes is None or len(boxes) == 0:
+        return None
+
+    # Convert to a normal NumPy array (detaches from inference-mode tensor)
+    xyxy = boxes.xyxy.detach().cpu().numpy()  # [N,4]
+
+    # Map boxes back to full-image coordinates
+    xyxy[:, 0] += x1
+    xyxy[:, 1] += y1
+    xyxy[:, 2] += x1
+    xyxy[:, 3] += y1
+
+    # Choose box with highest IoU vs reference bbox
+    candidates = torch.tensor(xyxy, dtype=torch.float32)  # [N,4]
+    ref = torch.tensor(ref_bbox.reshape(1, 4), dtype=torch.float32)
+    ious = ssdutils.calc_iou_tensor(ref, candidates).view(-1)
+    if ious.numel() == 0:
+        return None
+
+    best_idx = int(torch.argmax(ious))
+    best_iou = float(ious[best_idx])
+
+    min_iou = float(CONFIG.get("ssd_re3_correction_min_iou", 0.8))
+    if best_iou < min_iou:
+        logger.info("YOLO11 correction below IoU threshold: %.3f" % best_iou)
+        return None
+
+    best_box = candidates[best_idx].tolist()
+    logger.info("YOLO11 correction box %s with IoU %.3f" % (str(best_box), best_iou))
+    return best_box
+
+
 
 class Re3Tracker(object):
     def __init__(self, model_path = 'checkpoint.pth'):
@@ -543,26 +746,73 @@ class Tracker():
                 logger.warning("no image")
             return result, status
 
-        mimg = CURIMAGE
-        srect = getRectForTracker(mimg,self.shape)
-        pbox = self.tracker.track(1,mimg,prev_image=REFIMAGE,past_bbox=np.array([srect[0],srect[1],srect[2],srect[3]]))
-        logger.info("tracker reported:"+str(pbox)+" running SSD")
-        prep = SSDMULTIBOX.prepare(mimg,pbox)
-        ssd1box = SSDMULTIBOX.detect(prep,pbox)
-        ssd2box = SSDMULTIBOX.detect(prep,srect)
-        if ssd1box is None:
-            ssdbox=ssd2box
-        elif ssd2box is None:
-            ssdbox=ssd1box
-        else:
-            logger.info("combining ssd boxes")
-            ssdbox=list(float(CONFIG['ssd_re3_correction_alpha'])*np.array(ssd1box)+(1.0-float(CONFIG['ssd_re3_correction_alpha']))*np.array(ssd2box))
-        if ssdbox is not None:
-            logger.info("merging with Re3")
-            pbox=list(float(CONFIG['ssd_re3_correction_alpha'])*np.array(ssdbox)+(1.0-float(CONFIG['ssd_re3_correction_alpha']))*np.array(pbox))
-            logger.info("ssd fusion reported:"+str(pbox))
+        #mimg = CURIMAGE
+        #srect = getRectForTracker(mimg,self.shape)
+        #pbox = self.tracker.track(1,mimg,prev_image=REFIMAGE,past_bbox=np.array([srect[0],srect[1],srect[2],srect[3]]))
+        #logger.info("tracker reported:"+str(pbox)+" running SSD")
+        #prep = SSDMULTIBOX.prepare(mimg,pbox)
+        #ssd1box = SSDMULTIBOX.detect(prep,pbox)
+        #ssd2box = SSDMULTIBOX.detect(prep,srect)
+        #if ssd1box is None:
+            #ssdbox=ssd2box
+        #elif ssd2box is None:
+            #ssdbox=ssd1box
+        #else:
+            #logger.info("combining ssd boxes")
+            #ssdbox=list(float(CONFIG['ssd_re3_correction_alpha'])*np.array(ssd1box)+(1.0-float(CONFIG['ssd_re3_correction_alpha']))*np.array(ssd2box))
+        #if ssdbox is not None:
+            #logger.info("merging with Re3")
+            #pbox=list(float(CONFIG['ssd_re3_correction_alpha'])*np.array(ssdbox)+(1.0-float(CONFIG['ssd_re3_correction_alpha']))*np.array(pbox))
+            #logger.info("ssd fusion reported:"+str(pbox))
 
-        logger.info("fixed shape:"+str(pbox))
+        #logger.info("fixed shape:"+str(pbox))
+        
+        mimg = CURIMAGE
+        srect = getRectForTracker(mimg, self.shape)
+        pbox = self.tracker.track(
+            1,
+            mimg,
+            prev_image=REFIMAGE,
+            past_bbox=np.array([srect[0], srect[1], srect[2], srect[3]]),
+        )
+
+        logger.info("tracker reported: %s" % str(pbox))
+
+        # Decide which correction backend to use: YOLO11 (if available) or SSD (legacy)
+        use_yolo = (YOLO11NET is not None) and (CONFIG.get("yolo11model", None) is not None)
+
+        ssdbox = None
+        if use_yolo:
+            logger.info("running YOLO11 correction")
+            ssdbox = yolo11_correct_box(mimg, pbox, srect)
+        else:
+            logger.info("running SSD correction")
+            prep = SSDMULTIBOX.prepare(mimg, pbox)
+            ssd1box = SSDMULTIBOX.detect(prep, pbox)
+            ssd2box = SSDMULTIBOX.detect(prep, srect)
+            if ssd1box is None:
+                ssdbox = ssd2box
+            elif ssd2box is None:
+                ssdbox = ssd1box
+            else:
+                logger.info("combining ssd boxes")
+                alpha = float(CONFIG['ssd_re3_correction_alpha'])
+                ssdbox = list(
+                    alpha * np.array(ssd1box)
+                    + (1.0 - alpha) * np.array(ssd2box)
+                )
+
+        if ssdbox is not None:
+            logger.info("merging detection with Re3")
+            alpha = float(CONFIG['ssd_re3_correction_alpha'])
+            pbox = list(
+                alpha * np.array(ssdbox)
+                + (1.0 - alpha) * np.array(pbox)
+            )
+            logger.info("fusion reported: %s" % str(pbox))
+
+        logger.info("fixed shape:" + str(pbox))
+       
         fw=float(pbox[2]-pbox[0])/float(srect[2]-srect[0])
         fh=float(pbox[3]-pbox[1])/float(srect[3]-srect[1])
         cx=pbox[0]-(srect[0]*fw)
@@ -671,24 +921,86 @@ def trackerDetectFlags(qimg,shapes):
             if c:
                 shape.flags[FLAGCLASS[c]]=True
 
-def trackerAutoAnnotate(qimg,shapes):
+#def trackerAutoAnnotate(qimg,shapes):
+    #mimg = ocvutil.qtImg2CvMat(qimg)
+    #rects=[]
+    #for shape in shapes:
+        #rects.append(getRectForTracker(mimg,shape))
+    #newrects=SSDMULTIBOX.findnew(mimg,rects)[-1]
+    #newrects=newrects[newrects[:,0,1]>float(CONFIG['ssd_threshold_autoannotation'])]
+    #id0=int(random.random()*100000)*1000
+    #id1=0
+    #newshapes=[]
+    #for rect in newrects:
+        #myid=id0+id1
+        #myname=COCOCLASS[int(rect[0,0])]+("_%d"%(myid))
+        #shape=Shape(label=myname,shape_type="rectangle",flags={})
+        #shape.insertPoint(1,QtCore.QPoint(int(rect[1,0]),int(rect[1,1])))
+        #shape.insertPoint(2,QtCore.QPoint(int(rect[2,0]),int(rect[2,1])))
+        #id1+=1
+        #shape.flags['auto_flag']=True
+        #newshapes.append(shape)
+    #trackerDetectFlags(qimg,newshapes) # modifies newshapes
+    #return newshapes
+    
+def trackerAutoAnnotate(qimg, shapes):
+    global YOLO11NET, YOLO11CLASS
+
     mimg = ocvutil.qtImg2CvMat(qimg)
-    rects=[]
+    rects = []
     for shape in shapes:
-        rects.append(getRectForTracker(mimg,shape))
-    newrects=SSDMULTIBOX.findnew(mimg,rects)[-1]
-    newrects=newrects[newrects[:,0,1]>float(CONFIG['ssd_threshold_autoannotation'])]
-    id0=int(random.random()*100000)*1000
-    id1=0
-    newshapes=[]
+        rects.append(getRectForTracker(mimg, shape))
+
+    use_yolo = YOLO11NET is not None and CONFIG.get("yolo11model", None) is not None
+
+    if use_yolo:
+        # Use YOLO11 (ultralytics) for auto-annotation
+        conf = float(CONFIG.get("yolo11_conf_threshold", 0.25))
+        iou = float(CONFIG.get("yolo11_iou_threshold", 0.45))
+        newrects = yolo11_findnew(mimg, min_conf=conf, nms_iou=iou)
+    else:
+        # Original SSD-based auto-annotation
+        newrects = SSDMULTIBOX.findnew(mimg, rects)[-1]
+        newrects = newrects[
+            newrects[:, 0, 1] > float(CONFIG['ssd_threshold_autoannotation'])
+        ]
+
+    # Nothing found
+    if newrects.shape[0] == 0:
+        return []
+
+    id0 = int(random.random() * 100000) * 1000
+    id1 = 0
+    newshapes = []
+
+    # Helper to get class name
+    def class_name_from_id(idx):
+        idx = int(idx)
+        if use_yolo and YOLO11CLASS is not None:
+            # ultralytics names can be list or dict
+            if isinstance(YOLO11CLASS, dict):
+                return YOLO11CLASS.get(idx, str(idx))
+            elif isinstance(YOLO11CLASS, (list, tuple)):
+                if 0 <= idx < len(YOLO11CLASS):
+                    return YOLO11CLASS[idx]
+            return str(idx)
+        else:
+            # SSD / COCO pathway (existing behaviour)
+            if 0 <= idx < len(COCOCLASS):
+                return COCOCLASS[idx]
+            return str(idx)
+
     for rect in newrects:
-        myid=id0+id1
-        myname=COCOCLASS[int(rect[0,0])]+("_%d"%(myid))
-        shape=Shape(label=myname,shape_type="rectangle",flags={})
-        shape.insertPoint(1,QtCore.QPoint(int(rect[1,0]),int(rect[1,1])))
-        shape.insertPoint(2,QtCore.QPoint(int(rect[2,0]),int(rect[2,1])))
-        id1+=1
-        shape.flags['auto_flag']=True
+        myid = id0 + id1
+        cname = class_name_from_id(rect[0, 0])
+        myname = cname + ("_%d" % (myid))
+        shape = Shape(label=myname, shape_type="rectangle", flags={})
+        shape.insertPoint(1, QtCore.QPoint(int(rect[1, 0]), int(rect[1, 1])))
+        shape.insertPoint(2, QtCore.QPoint(int(rect[2, 0]), int(rect[2, 1])))
+        id1 += 1
+        shape.flags['auto_flag'] = True
         newshapes.append(shape)
-    trackerDetectFlags(qimg,newshapes) # modifies newshapes
+
+    trackerDetectFlags(qimg, newshapes)  # modifies newshapes
     return newshapes
+    

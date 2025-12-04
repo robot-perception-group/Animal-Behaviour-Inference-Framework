@@ -47,7 +47,8 @@ def get_install_requires():
         'termcolor',
         'opencv-contrib-python',
         'torch',
-        'torchvision'
+        'torchvision',
+        'ultralytics'
     ]
 
     # Find python binding for qt with priority:

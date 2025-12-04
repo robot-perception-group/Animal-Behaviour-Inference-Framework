@@ -184,6 +184,26 @@ def main():
         help='When auto-tracking, do not change already annotated frames, instead re-init tracker dictionary',
         default=argparse.SUPPRESS,
     )
+    # YOLO11 (ultralytics) detection backend for auto-annotation
+    parser.add_argument(
+        '--yolo11model',
+        help='YOLO11 model name (e.g. yolo11n.pt) or path to .pt file used for auto-annotation',
+        default=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        '--yolo11-conf-threshold',
+        dest='yolo11_conf_threshold',
+        type=float,
+        help='YOLO11 confidence threshold for auto annotation. Default: 0.25',
+        default=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        '--yolo11-iou-threshold',
+        dest='yolo11_iou_threshold',
+        type=float,
+        help='YOLO11 NMS IoU threshold for auto annotation. Default: 0.45',
+        default=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     if args.version:
