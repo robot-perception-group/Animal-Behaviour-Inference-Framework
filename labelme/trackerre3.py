@@ -43,6 +43,35 @@ YOLO11NET = None
 YOLO11CLASS = ['background','person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']  # class names for YOLO11 (from ultralytics)
 
 
+
+def _bbox_iou_xyxy(a, b):
+    """
+    Compute IoU between two boxes [x1,y1,x2,y2] in image coords.
+    """
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+
+    ix1 = max(ax1, bx1)
+    iy1 = max(ay1, by1)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+
+    iw = max(0.0, ix2 - ix1)
+    ih = max(0.0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    if union <= 0:
+        return 0.0
+
+    return inter / union
+
+
+
 def displayImage(image):
     #im2=(image*127+128).to(torch.uint8).cpu()
     im2=image.cpu()#*127+128).to(torch.uint8).cpu()
@@ -943,24 +972,130 @@ def trackerDetectFlags(qimg,shapes):
     #trackerDetectFlags(qimg,newshapes) # modifies newshapes
     #return newshapes
     
+#def trackerAutoAnnotate(qimg, shapes):
+    #global YOLO11NET, YOLO11CLASS
+
+    #mimg = ocvutil.qtImg2CvMat(qimg)
+    #rects = []
+    #for shape in shapes:
+        #rects.append(getRectForTracker(mimg, shape))
+
+    #use_yolo = YOLO11NET is not None and CONFIG.get("yolo11model", None) is not None
+
+    #if use_yolo:
+        ## Use YOLO11 (ultralytics) for auto-annotation
+        #conf = float(CONFIG.get("yolo11_conf_threshold", 0.25))
+        #iou = float(CONFIG.get("yolo11_iou_threshold", 0.45))
+        #newrects = yolo11_findnew(mimg, min_conf=conf, nms_iou=iou)
+    #else:
+        ## Original SSD-based auto-annotation
+        #newrects = SSDMULTIBOX.findnew(mimg, rects)[-1]
+        #newrects = newrects[
+            #newrects[:, 0, 1] > float(CONFIG['ssd_threshold_autoannotation'])
+        #]
+
+    ## Nothing found
+    #if newrects.shape[0] == 0:
+        #return []
+
+    #id0 = int(random.random() * 100000) * 1000
+    #id1 = 0
+    #newshapes = []
+
+    ## Helper to get class name
+    #def class_name_from_id(idx):
+        #idx = int(idx)
+        #if use_yolo and YOLO11CLASS is not None:
+            ## ultralytics names can be list or dict
+            #if isinstance(YOLO11CLASS, dict):
+                #return YOLO11CLASS.get(idx, str(idx))
+            #elif isinstance(YOLO11CLASS, (list, tuple)):
+                #if 0 <= idx < len(YOLO11CLASS):
+                    #return YOLO11CLASS[idx]
+            #return str(idx)
+        #else:
+            ## SSD / COCO pathway (existing behaviour)
+            #if 0 <= idx < len(COCOCLASS):
+                #return COCOCLASS[idx]
+            #return str(idx)
+
+    #for rect in newrects:
+        #myid = id0 + id1
+        #cname = class_name_from_id(rect[0, 0])
+        #myname = cname + ("_%d" % (myid))
+        #shape = Shape(label=myname, shape_type="rectangle", flags={})
+        #shape.insertPoint(1, QtCore.QPoint(int(rect[1, 0]), int(rect[1, 1])))
+        #shape.insertPoint(2, QtCore.QPoint(int(rect[2, 0]), int(rect[2, 1])))
+        #id1 += 1
+        #shape.flags['auto_flag'] = True
+        #newshapes.append(shape)
+
+    #trackerDetectFlags(qimg, newshapes)  # modifies newshapes
+    #return newshapes
+
 def trackerAutoAnnotate(qimg, shapes):
     global YOLO11NET, YOLO11CLASS
 
     mimg = ocvutil.qtImg2CvMat(qimg)
-    rects = []
+
+    # Existing shapes → boxes [x1,y1,x2,y2]
+    existing_boxes = []
     for shape in shapes:
-        rects.append(getRectForTracker(mimg, shape))
+        rect = getRectForTracker(mimg, shape)
+        if rect is not None:
+            # rect is [x1,y1,x2,y2]
+            existing_boxes.append(rect)
 
     use_yolo = YOLO11NET is not None and CONFIG.get("yolo11model", None) is not None
 
     if use_yolo:
-        # Use YOLO11 (ultralytics) for auto-annotation
+        # --- YOLO11 path ---
         conf = float(CONFIG.get("yolo11_conf_threshold", 0.25))
-        iou = float(CONFIG.get("yolo11_iou_threshold", 0.45))
-        newrects = yolo11_findnew(mimg, min_conf=conf, nms_iou=iou)
+        iou_nms = float(CONFIG.get("yolo11_iou_threshold", 0.45))
+
+        newrects = yolo11_findnew(mimg, min_conf=conf, nms_iou=iou_nms)
+
+        # newrects: torch.Tensor [N,3,2] or empty
+        import torch
+
+        if newrects is None:
+            return []
+
+        if torch.is_tensor(newrects):
+            nr = newrects.detach().cpu().numpy()
+        else:
+            nr = np.asarray(newrects)
+
+        if nr.shape[0] == 0:
+            return []
+
+        # IoU threshold for "already have this object"
+        dup_iou_thr = float(CONFIG.get("autoannotate_existing_iou", 0.5))
+
+        keep_mask = np.ones(nr.shape[0], dtype=bool)
+        for i in range(nr.shape[0]):
+            # Det box from YOLO rect: [class, score], [x1,y1], [x2,y2]
+            bx = nr[i]
+            det_box = np.array([bx[1, 0], bx[1, 1], bx[2, 0], bx[2, 1]], dtype=float)
+
+            # Compare to all existing shapes; if any IoU ≥ threshold, drop it
+            for ex in existing_boxes:
+                ex_box = np.array(ex, dtype=float)
+                iou_val = _bbox_iou_xyxy(det_box, ex_box)
+                if iou_val >= dup_iou_thr:
+                    keep_mask[i] = False
+                    break
+
+        nr = nr[keep_mask]
+        if nr.shape[0] == 0:
+            return []
+
+        # newrects can be numpy here; later code only does rect[...] indexing
+        newrects = nr
+
     else:
-        # Original SSD-based auto-annotation
-        newrects = SSDMULTIBOX.findnew(mimg, rects)[-1]
+        # --- SSD path (unchanged) ---
+        newrects = SSDMULTIBOX.findnew(mimg, existing_boxes)[-1]
         newrects = newrects[
             newrects[:, 0, 1] > float(CONFIG['ssd_threshold_autoannotation'])
         ]
@@ -973,11 +1108,9 @@ def trackerAutoAnnotate(qimg, shapes):
     id1 = 0
     newshapes = []
 
-    # Helper to get class name
     def class_name_from_id(idx):
         idx = int(idx)
         if use_yolo and YOLO11CLASS is not None:
-            # ultralytics names can be list or dict
             if isinstance(YOLO11CLASS, dict):
                 return YOLO11CLASS.get(idx, str(idx))
             elif isinstance(YOLO11CLASS, (list, tuple)):
@@ -985,11 +1118,11 @@ def trackerAutoAnnotate(qimg, shapes):
                     return YOLO11CLASS[idx]
             return str(idx)
         else:
-            # SSD / COCO pathway (existing behaviour)
             if 0 <= idx < len(COCOCLASS):
                 return COCOCLASS[idx]
             return str(idx)
 
+    # Iterate over detections (works for both numpy array and torch tensor)
     for rect in newrects:
         myid = id0 + id1
         cname = class_name_from_id(rect[0, 0])
