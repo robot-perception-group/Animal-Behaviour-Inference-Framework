@@ -134,7 +134,7 @@ If you use this project in your research or wish to refer to the baseline result
 	pages = {},
 	keywords = {Animal behavior Inference, Drone based monitoring, Deep neural network based inference, Automatic labeling, Labelled aerial datasets},
 	doi = {},
-	url = {[https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.70056](https://www.biorxiv.org/content/early/2023/08/02/2023.07.31.551177)},
+	url = {[https://besjournals.onlinelibrary.wiley.com/doi/10.1111/2041-210X.70124](https://besjournals.onlinelibrary.wiley.com/doi/10.1111/2041-210X.70124)},
 	eprint = {},
 	year = {2025},
 	comments={Accepted, 1st July 2025}
