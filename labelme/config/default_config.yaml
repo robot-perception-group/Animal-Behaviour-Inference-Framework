@@ -109,3 +109,4 @@ version: 5.2.10
 yolo11_conf_threshold: 0.25
 yolo11_iou_threshold: 0.45
 yolo11model: null
+auto_viewpoint_estimation: false

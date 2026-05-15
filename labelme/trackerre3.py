@@ -1135,5 +1135,21 @@ def trackerAutoAnnotate(qimg, shapes):
         newshapes.append(shape)
 
     trackerDetectFlags(qimg, newshapes)  # modifies newshapes
+    
+    # Auto-estimate viewpoint for zebras if enabled in config
+    if CONFIG and CONFIG.get('auto_viewpoint_estimation', False):
+        try:
+            zebra_shapes = [s for s in newshapes if 'zebra' in s.label.lower()]
+            if zebra_shapes:
+                from viewpoint_estimation.utils import estimate_viewpoints, load_viewpoint_config
+                vp_cfg = load_viewpoint_config()
+                if vp_cfg:
+                    vp_results = estimate_viewpoints(qimg, zebra_shapes, vp_cfg)
+                    for shape, angle in vp_results:
+                        if angle is not None:
+                            shape.other_data['viewpoint'] = angle
+        except Exception as e:
+            logger.warn(f'Viewpoint estimation for auto-annotated zebras failed: {e}')
+    
     return newshapes
     

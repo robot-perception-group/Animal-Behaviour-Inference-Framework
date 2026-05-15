@@ -1,0 +1,31 @@
+mode: uav        # sideview | uav
+run: directory           # single | directory
+
+# used when run: single
+image_path: 
+
+# used when run: directory
+image_dir: 
+output_csv:
+
+device: auto
+feature_type: stance  # expert | symmetry | stance
+hidden_dims: [256, 256, 256, 256]
+yolo_conf: 0.25
+min_keypoints: 6
+min_kpt_conf: 0.15
+
+viewpoint_weights: viewpoint_model/real_deep_stable_stance_finetune.pth
+
+models:
+  sideview:
+    keypoint_weights: keypoint_models/cropped_sideview.pt
+  uav:
+    keypoint_weights: keypoint_models/cropped_uav.pt
+
+
+
+
+
+
+
