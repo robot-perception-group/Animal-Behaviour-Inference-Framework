@@ -1,27 +1,26 @@
 mode: uav        # sideview | uav
-run: directory           # single | directory
 
-# used when run: single
-image_path: 
 
-# used when run: directory
-image_dir: 
-output_csv:
+data_path: .../demo # directory or image
 
-device: auto
-feature_type: stance  # expert | symmetry | stance
+
+device: cuda #  cpu | cuda
+feature_type: stance     
 hidden_dims: [256, 256, 256, 256]
 yolo_conf: 0.25
 min_keypoints: 6
 min_kpt_conf: 0.15
 
-viewpoint_weights: viewpoint_model/real_deep_stable_stance_finetune.pth
+
+
+
+viewpoint_weights: models/viewpoint_model/viewpoint_mlp.pth
 
 models:
   sideview:
-    keypoint_weights: keypoint_models/cropped_sideview.pt
+    keypoint_weights: models/keypoint_models/cropped_sideview.pt
   uav:
-    keypoint_weights: keypoint_models/cropped_uav.pt
+    keypoint_weights: models/keypoint_models/cropped_uav.pt
 
 
 

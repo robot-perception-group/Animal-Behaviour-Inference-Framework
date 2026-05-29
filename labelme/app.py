@@ -2167,7 +2167,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.errorMessage('Viewpoint Error', 'Please open an image.')
             return
         try:
-            from viewpoint_estimation.utils import estimate_viewpoints
+            from viewpoint_estimation.utils import estimate_viewpoints, estimate_viewpoints_with_keypoints
             shapes = self.canvas.selectedShapes or self.canvas.shapes
             
             # Filter to only zebras
@@ -2175,15 +2175,36 @@ class MainWindow(QtWidgets.QMainWindow):
             if not zebra_shapes:
                 self.errorMessage('Viewpoint Error', 'No zebras found. Viewpoint estimation only works for zebras.')
                 return
-            
-            results = estimate_viewpoints(self.image, zebra_shapes, self._loadViewpointConfig())
+
+            vp_cfg = self._loadViewpointConfig()
+            add_keypoints = bool(vp_cfg.get('viewpoint_add_keypoints', False))
+            if add_keypoints:
+                results = estimate_viewpoints_with_keypoints(self.image, zebra_shapes, vp_cfg)
+            else:
+                results = estimate_viewpoints(self.image, zebra_shapes, vp_cfg)
 
             # Update in-memory shapes; save via standard label save flow.
-            for shape, angle in results:
+            for item in results:
+                shape, angle = item[0], item[1]
                 if angle is not None:
                     shape.other_data['viewpoint'] = angle
                 else:
                     shape.other_data.pop('viewpoint', None)
+
+            if add_keypoints:
+                kpt_min_conf = float(vp_cfg.get('viewpoint_keypoint_min_conf', 0.15))
+                kpt_shapes = []
+                for shape, _angle, kpts in results:
+                    for i, (kx, ky, kconf) in enumerate(kpts):
+                        if kconf < kpt_min_conf:
+                            continue
+                        kshape = Shape(label='{}_kpt_{}'.format(shape.label, i), shape_type='point', flags={})
+                        kshape.addPoint(QtCore.QPointF(kx, ky))
+                        kshape.flags['auto_flag'] = True
+                        kshape.flags['viewpoint_keypoint'] = True
+                        kpt_shapes.append(kshape)
+                if kpt_shapes:
+                    self.loadShapes(kpt_shapes, replace=False)
 
             # Persist using normal save path (respects output_dir/auto_save).
             self.setDirty()

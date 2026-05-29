@@ -1141,13 +1141,31 @@ def trackerAutoAnnotate(qimg, shapes):
         try:
             zebra_shapes = [s for s in newshapes if 'zebra' in s.label.lower()]
             if zebra_shapes:
-                from viewpoint_estimation.utils import estimate_viewpoints, load_viewpoint_config
+                from viewpoint_estimation.utils import estimate_viewpoints, estimate_viewpoints_with_keypoints, load_viewpoint_config
                 vp_cfg = load_viewpoint_config()
                 if vp_cfg:
-                    vp_results = estimate_viewpoints(qimg, zebra_shapes, vp_cfg)
-                    for shape, angle in vp_results:
+                    add_keypoints = bool(vp_cfg.get('viewpoint_add_keypoints', False))
+                    if add_keypoints:
+                        vp_results = estimate_viewpoints_with_keypoints(qimg, zebra_shapes, vp_cfg)
+                    else:
+                        vp_results = estimate_viewpoints(qimg, zebra_shapes, vp_cfg)
+
+                    for item in vp_results:
+                        shape, angle = item[0], item[1]
                         if angle is not None:
                             shape.other_data['viewpoint'] = angle
+
+                    if add_keypoints:
+                        kpt_min_conf = float(vp_cfg.get('viewpoint_keypoint_min_conf', 0.15))
+                        for shape, _angle, kpts in vp_results:
+                            for i, (kx, ky, kconf) in enumerate(kpts):
+                                if kconf < kpt_min_conf:
+                                    continue
+                                kshape = Shape(label='{}_kpt_{}'.format(shape.label, i), shape_type='point', flags={})
+                                kshape.addPoint(QtCore.QPointF(kx, ky))
+                                kshape.flags['auto_flag'] = True
+                                kshape.flags['viewpoint_keypoint'] = True
+                                newshapes.append(kshape)
         except Exception as e:
             logger.warn(f'Viewpoint estimation for auto-annotated zebras failed: {e}')
     
