@@ -45,7 +45,7 @@ here = osp.dirname(osp.abspath(__file__))
 # - Zoom is too "steppy".
 
 
-LABEL_COLORMAP = imgviz.label_colormap(value=200)
+LABEL_COLORMAP = imgviz.label_colormap()
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -76,6 +76,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # initialize Trackers (load models)
         trackerInit(self._config)
+        self._viewpoint_config = None
+        self._viewpoint_inference = None
 
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
@@ -384,6 +386,15 @@ class MainWindow(QtWidgets.QMainWindow):
                         self.tr('Automatically annotate all object instances visible'),
                         enabled=False)
 
+        viewpointEstimate = action(
+            self.tr('Estimate Viewpoint'),
+            self.estimateViewpoint,
+            None,
+            'expert',
+            self.tr('Estimate viewpoint for the current image'),
+            enabled=False,
+        )
+
         startStopAutoMode = action(self.tr('StartStopAutoMode'), self.startStopAutoMode,
                         shortcuts['startStopAutoMode'], 'icon',
                         self.tr('Automatically annotate the whole video'),
@@ -528,6 +539,7 @@ class MainWindow(QtWidgets.QMainWindow):
             openNextImg=openNextImg, openPrevImg=openPrevImg, openseg=openseg,
             increase_blend=increase_blend, decrease_blend=decrease_blend,
             toggle_tracker=toggle_tracker,
+            viewpointEstimate=viewpointEstimate,
             fileMenuActions=(opendir, openseg, save, saveAs, close, quit),
             tool=(),
             # XXX: need to add some actions here to activate the shortcut
@@ -555,6 +567,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 editMode,
                 edit,
                 autoAnnotate,
+                viewpointEstimate,
                 #copy,
                 delete,
                 undo,
@@ -573,6 +586,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 createLineStripMode,
                 editMode,
                 autoAnnotate,
+                viewpointEstimate,
                 startStopAutoMode,
             ),
             onShapesPresent=(saveAs, hideAll, showAll),
@@ -662,6 +676,7 @@ class MainWindow(QtWidgets.QMainWindow):
             createRectangleMode,
             #createAutoContourMode,
             autoAnnotate,
+            viewpointEstimate,
             editMode,
             copy,
             delete,
@@ -826,6 +841,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.createPointMode.setEnabled(True)
         self.actions.createLineStripMode.setEnabled(True)
         self.actions.autoAnnotate.setEnabled(True)
+        self.actions.viewpointEstimate.setEnabled(True)
         self.actions.startStopAutoMode.setEnabled(True)
         title = __appname__
         if self.filename is not None:
@@ -2136,6 +2152,67 @@ class MainWindow(QtWidgets.QMainWindow):
         track_shapes=trackerAutoAnnotate(self.image,self.canvas.shapes)
         self.loadShapes(track_shapes, replace=False)
         self.setDirty()
+
+    def _loadViewpointConfig(self):
+        if self._viewpoint_config is not None:
+            return self._viewpoint_config
+
+        from viewpoint_estimation.utils import load_viewpoint_config
+
+        self._viewpoint_config = load_viewpoint_config()
+        return self._viewpoint_config
+
+    def estimateViewpoint(self):
+        if self.image.isNull() or not self.imagePath:
+            self.errorMessage('Viewpoint Error', 'Please open an image.')
+            return
+        try:
+            from viewpoint_estimation.utils import estimate_viewpoints, estimate_viewpoints_with_keypoints
+            shapes = self.canvas.selectedShapes or self.canvas.shapes
+            
+            # Filter to only zebras
+            zebra_shapes = [s for s in shapes if 'zebra' in s.label.lower()]
+            if not zebra_shapes:
+                self.errorMessage('Viewpoint Error', 'No zebras found. Viewpoint estimation only works for zebras.')
+                return
+
+            vp_cfg = self._loadViewpointConfig()
+            add_keypoints = bool(vp_cfg.get('viewpoint_add_keypoints', False))
+            if add_keypoints:
+                results = estimate_viewpoints_with_keypoints(self.image, zebra_shapes, vp_cfg)
+            else:
+                results = estimate_viewpoints(self.image, zebra_shapes, vp_cfg)
+
+            # Update in-memory shapes; save via standard label save flow.
+            for item in results:
+                shape, angle = item[0], item[1]
+                if angle is not None:
+                    shape.other_data['viewpoint'] = angle
+                else:
+                    shape.other_data.pop('viewpoint', None)
+
+            if add_keypoints:
+                kpt_min_conf = float(vp_cfg.get('viewpoint_keypoint_min_conf', 0.15))
+                kpt_shapes = []
+                for shape, _angle, kpts in results:
+                    for i, (kx, ky, kconf) in enumerate(kpts):
+                        if kconf < kpt_min_conf:
+                            continue
+                        kshape = Shape(label='{}_kpt_{}'.format(shape.label, i), shape_type='point', flags={})
+                        kshape.addPoint(QtCore.QPointF(kx, ky))
+                        kshape.flags['auto_flag'] = True
+                        kshape.flags['viewpoint_keypoint'] = True
+                        kpt_shapes.append(kshape)
+                if kpt_shapes:
+                    self.loadShapes(kpt_shapes, replace=False)
+
+            # Persist using normal save path (respects output_dir/auto_save).
+            self.setDirty()
+            self.canvas.update()
+            self.status(self.tr('Viewpoint estimation finished'))
+        except Exception as e:
+            logger.exception('Viewpoint estimation failed')
+            self.errorMessage('Viewpoint Error', str(e))
 
     def startStopAutoMode(self):
         if self.autoMode:

@@ -1,0 +1,30 @@
+mode: uav        # sideview | uav
+
+
+data_path: .../demo # directory or image
+
+
+device: cuda #  cpu | cuda
+feature_type: stance     
+hidden_dims: [256, 256, 256, 256]
+yolo_conf: 0.25
+min_keypoints: 6
+min_kpt_conf: 0.15
+
+
+
+
+viewpoint_weights: models/viewpoint_model/viewpoint_mlp.pth
+
+models:
+  sideview:
+    keypoint_weights: models/keypoint_models/cropped_sideview.pt
+  uav:
+    keypoint_weights: models/keypoint_models/cropped_uav.pt
+
+
+
+
+
+
+
