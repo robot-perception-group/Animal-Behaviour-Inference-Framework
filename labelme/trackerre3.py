@@ -840,10 +840,47 @@ class Tracker():
             )
             logger.info("fusion reported: %s" % str(pbox))
 
+        #logger.info("fixed shape:" + str(pbox))
+        
         logger.info("fixed shape:" + str(pbox))
+
+        # ---------------------------------------------------------
+        # Guard against lost / invalid tracks
+        # ---------------------------------------------------------
+        pbox = np.asarray(pbox, dtype=float).reshape(-1)
+
+        if pbox.size != 4 or not np.all(np.isfinite(pbox)):
+            logger.warning("Tracker produced invalid bounding box: %s", str(pbox))
+            return result, False
+
+        x1, y1, x2, y2 = pbox
+        H, W = mimg.shape[:2]
+
+        # Degenerate tracker box
+        if x2 <= x1 or y2 <= y1:
+            logger.warning("Tracker produced degenerate bounding box: %s", str(pbox))
+            return result, False
+
+        # Completely outside image.
+        #
+        # IMPORTANT: a partially visible animal is still considered valid.
+        if x2 <= 0 or y2 <= 0 or x1 >= W or y1 >= H:
+            logger.info("Tracked animal has left the image: %s", str(pbox))
+            return result, False
+
+        # Protect against invalid reference box
+        sw = float(srect[2] - srect[0])
+        sh = float(srect[3] - srect[1])
+
+        if sw <= 1.0 or sh <= 1.0:
+            logger.warning("Invalid reference bounding box: %s", str(srect))
+            return result, False
+
+        fw = float(x2 - x1) / sw
+        fh = float(y2 - y1) / sh        
        
-        fw=float(pbox[2]-pbox[0])/float(srect[2]-srect[0])
-        fh=float(pbox[3]-pbox[1])/float(srect[3]-srect[1])
+        #fw=float(pbox[2]-pbox[0])/float(srect[2]-srect[0])
+        #fh=float(pbox[3]-pbox[1])/float(srect[3]-srect[1])
         cx=pbox[0]-(srect[0]*fw)
         cy=pbox[1]-(srect[1]*fh)
 

@@ -86,6 +86,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dirty = False
         self.image_skip = int(self._config['image_skip'])
         self.autoMode = False
+        self.autoStopWhenTrackersGone = False
 
         self._noSelectionSlot = False
 
@@ -2117,36 +2118,83 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tracker_dict.clear()
 
+    #def track_shape(self, shapes):
+        #if not self.tracker_dict:
+            #return shapes
+
+        ##print(self.tracker_dict)
+
+        #primary = self.image #self.canvas.get_blend_image()
+
+        #track_shapes = []
+
+        #tracker_keys = self.tracker_dict.keys()
+
+        #trackerFindGlobalOffset(self.previmage,primary)
+
+        #for shape in shapes:
+            #tid = shape.label
+            #if tid in tracker_keys:
+                #tracker = self.tracker_dict[tid]
+                #tracker.initTracker(shape)
+                #tshape, status = tracker.updateTracker(shape)
+                #if not status:
+                    #logger.warning('failed to reinitialize tracker for {}'.format(tid))
+
+                #track_shapes.append(tshape)
+            #else:
+                #print("No tracker found")
+                #logger.warning('no tracker found for {}'.format(tid))
+                #track_shapes.append(shape)
+
+        #return track_shapes
+    
     def track_shape(self, shapes):
         if not self.tracker_dict:
             return shapes
 
-        #print(self.tracker_dict)
-
-        primary = self.image #self.canvas.get_blend_image()
+        primary = self.image
 
         track_shapes = []
+        failed_trackers = []
 
-        tracker_keys = self.tracker_dict.keys()
+        tracker_keys = set(self.tracker_dict.keys())
 
-        trackerFindGlobalOffset(self.previmage,primary)
+        trackerFindGlobalOffset(self.previmage, primary)
 
         for shape in shapes:
             tid = shape.label
+
             if tid in tracker_keys:
                 tracker = self.tracker_dict[tid]
+
                 tracker.initTracker(shape)
                 tshape, status = tracker.updateTracker(shape)
+
                 if not status:
-                    logger.warning('failed to reinitialize tracker for {}'.format(tid))
+                    logger.warning(
+                        'Tracker lost object {}'.format(tid)
+                    )
+                    failed_trackers.append(tid)
+
+                    # Do NOT copy the stale box into this frame.
+                    continue
 
                 track_shapes.append(tshape)
-            else:
-                print("No tracker found")
-                logger.warning('no tracker found for {}'.format(tid))
-                track_shapes.append(shape)
 
-        return track_shapes
+            else:
+                logger.warning(
+                    'no tracker found for {}'.format(tid)
+                )
+
+        # Remove dead trackers
+        for tid in failed_trackers:
+            logger.info(
+                'Removing finished tracker {}'.format(tid)
+            )
+            self.tracker_dict.pop(tid, None)
+
+        return track_shapes    
 
     def autoAnnotate(self):
         track_shapes=trackerAutoAnnotate(self.image,self.canvas.shapes)
@@ -2214,34 +2262,89 @@ class MainWindow(QtWidgets.QMainWindow):
             logger.exception('Viewpoint estimation failed')
             self.errorMessage('Viewpoint Error', str(e))
 
+    #def startStopAutoMode(self):
+        #if self.autoMode:
+            #self.actions.startStopAutoMode.setChecked(False)
+            #self.autoMode = False
+            #logger.info('Auto Run Stopped')
+        #else:
+            #if not self.mayContinue():
+                #return
+            #self.actions.startStopAutoMode.setChecked(True)
+            #self.autoMode = True
+            #logger.info('Auto Run Started')
+            #self.queueEvent(functools.partial(self.autoStep))
     def startStopAutoMode(self):
         if self.autoMode:
             self.actions.startStopAutoMode.setChecked(False)
             self.autoMode = False
+            self.autoStopWhenTrackersGone = False
             logger.info('Auto Run Stopped')
+
         else:
             if not self.mayContinue():
                 return
+
             self.actions.startStopAutoMode.setChecked(True)
+
+            # If trackers exist when Auto Mode starts,
+            # stop automatically when all those trackers disappear.
+            self.autoStopWhenTrackersGone = bool(self.tracker_dict)
+
             self.autoMode = True
             logger.info('Auto Run Started')
-            self.queueEvent(functools.partial(self.autoStep))
+
+            self.queueEvent(functools.partial(self.autoStep))            
 
     def stepsizeChanged(self):
         self.image_skip=int(self.stepsizeWidget.value())
 
+    #def autoStep(self):
+        #if self.autoMode:
+            #if len(self.imageList) <= 0 or self.filename == self.imageList[-1]:
+                #self.autoMode = False
+                #self.actions.startStopAutoMode.setChecked(False)
+                #if self._config['auto_run']:
+                      #self.queueEvent(functools.partial(self.autoRunFin))
+
+            #else:
+                #logger.info('Auto Run: %s'%self.filename)
+                #self._openNextImg(skip=self.image_skip)
+                #self.queueEvent(functools.partial(self.autoStep))
+                
     def autoStep(self):
         if self.autoMode:
+
+            # Tracking run finished because all tracked animals left image.
+            if self.autoStopWhenTrackersGone and not self.tracker_dict:
+                logger.info(
+                    'Auto Run stopped: all tracked objects have left the image'
+                )
+
+                self.autoMode = False
+                self.autoStopWhenTrackersGone = False
+                self.actions.startStopAutoMode.setChecked(False)
+                return
+
+            # End of image sequence
             if len(self.imageList) <= 0 or self.filename == self.imageList[-1]:
                 self.autoMode = False
+                self.autoStopWhenTrackersGone = False
                 self.actions.startStopAutoMode.setChecked(False)
+
                 if self._config['auto_run']:
-                      self.queueEvent(functools.partial(self.autoRunFin))
+                    self.queueEvent(
+                        functools.partial(self.autoRunFin)
+                    )
 
             else:
-                logger.info('Auto Run: %s'%self.filename)
+                logger.info('Auto Run: %s' % self.filename)
+
                 self._openNextImg(skip=self.image_skip)
-                self.queueEvent(functools.partial(self.autoStep))
+
+                self.queueEvent(
+                    functools.partial(self.autoStep)
+                )                
 
     def autoRun(self):
         selected_shapes=[]
