@@ -173,6 +173,63 @@ class Shape(object):
                 color = self.select_fill_color \
                     if self.selected else self.fill_color
                 painter.fillPath(line_path, QtGui.QBrush(color, style = Qt.Dense6Pattern))
+                # Draw viewpoint arrow if viewpoint estimation exists
+                viewpoint = self.other_data.get('viewpoint')
+
+                if viewpoint is not None:
+                    rect = self.boundingRect()
+                    center = rect.center()
+
+                    angle = math.radians(float(viewpoint))
+
+                    # Viewpoint convention:
+                    #   0°   = up
+                    #   90°  = right
+                    #   180° = down
+                    #   270° = left
+                    dx = math.sin(angle)
+                    dy = -math.cos(angle)
+
+                    arrow_length = 45.0 / self.scale
+                    head_length = 12.0 / self.scale
+                    head_width = 7.0 / self.scale
+
+                    tip = QtCore.QPointF(
+                        center.x() + arrow_length * dx,
+                        center.y() + arrow_length * dy
+                    )
+
+                    vp_color = QtGui.QColor(255, 255, 0)
+                    vp_pen = QtGui.QPen(vp_color)
+                    vp_pen.setWidth(max(1, int(round(3.0 / self.scale))))
+                    painter.setPen(vp_pen)
+
+                    # Main shaft
+                    painter.drawLine(center, tip)
+
+                    # Perpendicular direction
+                    px = -dy
+                    py = dx
+
+                    # Base of triangular arrowhead
+                    base_x = tip.x() - head_length * dx
+                    base_y = tip.y() - head_length * dy
+
+                    head1 = QtCore.QPointF(
+                        base_x + head_width * px,
+                        base_y + head_width * py
+                    )
+
+                    head2 = QtCore.QPointF(
+                        base_x - head_width * px,
+                        base_y - head_width * py
+                    )
+
+                    # Filled triangular arrowhead
+                    arrow_head = QtGui.QPolygonF([tip, head1, head2])
+                    painter.setBrush(QtGui.QBrush(vp_color))
+                    painter.drawPolygon(arrow_head)
+                    painter.setBrush(QtCore.Qt.NoBrush)
 
     def drawVertex(self, path, i):
         d = self.point_size / self.scale

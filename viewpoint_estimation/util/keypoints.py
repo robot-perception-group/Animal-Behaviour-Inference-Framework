@@ -1,4 +1,6 @@
+from __future__ import annotations
 import numpy as np
+
 
 def canonicalize_keypoints(kpts_xyc: np.ndarray, bbox_xyxy: np.ndarray | None = None) -> np.ndarray:
     out = kpts_xyc.copy().astype(np.float32)

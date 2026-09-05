@@ -87,6 +87,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.image_skip = int(self._config['image_skip'])
         self.autoMode = False
         self.autoStopWhenTrackersGone = False
+        self.autoViewpoint = False
 
         self._noSelectionSlot = False
 
@@ -396,6 +397,16 @@ class MainWindow(QtWidgets.QMainWindow):
             enabled=False,
         )
 
+        autoViewpoint = action(
+            self.tr('Auto Viewpoint'),
+            self.toggleAutoViewpoint,
+            None,
+            'expert',
+            self.tr('Automatically estimate viewpoint after detection/tracking'),
+            enabled=False,
+            checkable=True,
+        )
+
         startStopAutoMode = action(self.tr('StartStopAutoMode'), self.startStopAutoMode,
                         shortcuts['startStopAutoMode'], 'icon',
                         self.tr('Automatically annotate the whole video'),
@@ -541,6 +552,7 @@ class MainWindow(QtWidgets.QMainWindow):
             increase_blend=increase_blend, decrease_blend=decrease_blend,
             toggle_tracker=toggle_tracker,
             viewpointEstimate=viewpointEstimate,
+            autoViewpoint=autoViewpoint,
             fileMenuActions=(opendir, openseg, save, saveAs, close, quit),
             tool=(),
             # XXX: need to add some actions here to activate the shortcut
@@ -569,6 +581,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 edit,
                 autoAnnotate,
                 viewpointEstimate,
+                autoViewpoint,
                 #copy,
                 delete,
                 undo,
@@ -588,6 +601,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 editMode,
                 autoAnnotate,
                 viewpointEstimate,
+                autoViewpoint,
                 startStopAutoMode,
             ),
             onShapesPresent=(saveAs, hideAll, showAll),
@@ -678,6 +692,7 @@ class MainWindow(QtWidgets.QMainWindow):
             #createAutoContourMode,
             autoAnnotate,
             viewpointEstimate,
+            autoViewpoint,
             editMode,
             copy,
             delete,
@@ -1571,8 +1586,16 @@ class MainWindow(QtWidgets.QMainWindow):
                     otrack_shapes.append(shape)
             if len(otrack_shapes):
                 track_shapes = self.track_shape(otrack_shapes)
-                trackerDetectFlags(self.image,track_shapes) 
+                trackerDetectFlags(self.image,track_shapes)
                 self.loadShapes(track_shapes, replace=False)
+
+                if self.autoViewpoint and track_shapes:
+                    self._estimateViewpointForShapes(
+                        track_shapes,
+                        silent=True,
+                        add_keypoints=False,
+                    )
+
                 self.setDirty()
             else:
                 self.setClean()
@@ -2197,9 +2220,29 @@ class MainWindow(QtWidgets.QMainWindow):
         return track_shapes    
 
     def autoAnnotate(self):
-        track_shapes=trackerAutoAnnotate(self.image,self.canvas.shapes)
+        track_shapes = trackerAutoAnnotate(self.image, self.canvas.shapes)
         self.loadShapes(track_shapes, replace=False)
+
+        if self.autoViewpoint and track_shapes:
+            self._estimateViewpointForShapes(
+                track_shapes,
+                silent=True,
+                add_keypoints=False,
+            )
+
         self.setDirty()
+
+    def toggleAutoViewpoint(self, value):
+        self.autoViewpoint = bool(value)
+        logger.info(
+            'Auto Viewpoint %s',
+            'enabled' if self.autoViewpoint else 'disabled'
+        )
+        self.status(
+            self.tr(
+                'Auto Viewpoint {}'
+            ).format('enabled' if self.autoViewpoint else 'disabled')
+        )
 
     def _loadViewpointConfig(self):
         if self._viewpoint_config is not None:
@@ -2210,57 +2253,171 @@ class MainWindow(QtWidgets.QMainWindow):
         self._viewpoint_config = load_viewpoint_config()
         return self._viewpoint_config
 
-    def estimateViewpoint(self):
-        if self.image.isNull() or not self.imagePath:
-            self.errorMessage('Viewpoint Error', 'Please open an image.')
-            return
-        try:
-            from viewpoint_estimation.utils import estimate_viewpoints, estimate_viewpoints_with_keypoints
-            shapes = self.canvas.selectedShapes or self.canvas.shapes
-            
-            # Filter to only zebras
-            zebra_shapes = [s for s in shapes if 'zebra' in s.label.lower()]
-            if not zebra_shapes:
-                self.errorMessage('Viewpoint Error', 'No zebras found. Viewpoint estimation only works for zebras.')
-                return
+    def _getViewpointInference(self):
+        """Load the viewpoint networks once and reuse them across frames."""
+        if self._viewpoint_inference is None:
+            from viewpoint_estimation.predictor import ViewpointInference
 
             vp_cfg = self._loadViewpointConfig()
-            add_keypoints = bool(vp_cfg.get('viewpoint_add_keypoints', False))
-            if add_keypoints:
-                results = estimate_viewpoints_with_keypoints(self.image, zebra_shapes, vp_cfg)
-            else:
-                results = estimate_viewpoints(self.image, zebra_shapes, vp_cfg)
+            logger.info('Loading viewpoint inference models')
+            self._viewpoint_inference = ViewpointInference(vp_cfg)
+            logger.info('Viewpoint inference models loaded')
 
-            # Update in-memory shapes; save via standard label save flow.
+        return self._viewpoint_inference
+
+    def _estimateViewpointForShapes(
+        self,
+        shapes,
+        silent=False,
+        add_keypoints=False,
+    ):
+        """Estimate viewpoint for the supplied shapes.
+
+        Automatic mode deliberately uses add_keypoints=False so tracking JSONs
+        receive only the compact ``viewpoint`` field and not extra point shapes.
+        """
+        if self.image.isNull() or not self.imagePath or not shapes:
+            return False
+
+        try:
+            vp_cfg = self._loadViewpointConfig()
+
+            if add_keypoints:
+                # Keep the existing manual/debug behaviour when keypoint
+                # visualisation is explicitly enabled in the viewpoint config.
+                from viewpoint_estimation.utils import (
+                    estimate_viewpoints_with_keypoints,
+                )
+
+                results = estimate_viewpoints_with_keypoints(
+                    self.image,
+                    shapes,
+                    vp_cfg,
+                )
+            else:
+                # Important for Auto Viewpoint: reuse one loaded inference
+                # object instead of reloading YOLO + viewpoint weights on
+                # every frame.
+                from viewpoint_estimation.utils import _qimage_to_cv2
+
+                inf = self._getViewpointInference()
+                results = []
+
+                for shape in shapes:
+                    pts = getattr(shape, 'points', [])
+                    xs = [
+                        float(p.x() if hasattr(p, 'x') else p[0])
+                        for p in pts
+                    ]
+                    ys = [
+                        float(p.y() if hasattr(p, 'y') else p[1])
+                        for p in pts
+                    ]
+
+                    angle = None
+
+                    if xs and ys:
+                        x0 = max(0, int(min(xs)))
+                        y0 = max(0, int(min(ys)))
+                        x1 = min(
+                            self.image.width() - 1,
+                            int(max(xs)),
+                        )
+                        y1 = min(
+                            self.image.height() - 1,
+                            int(max(ys)),
+                        )
+
+                        w = x1 - x0 + 1
+                        h = y1 - y0 + 1
+
+                        if w > 0 and h > 0:
+                            crop = self.image.copy(x0, y0, w, h)
+                            crop_cv = _qimage_to_cv2(crop)
+
+                            try:
+                                angle = inf.predict_angle_from_image(crop_cv)
+                            except Exception:
+                                logger.exception(
+                                    'Viewpoint estimation failed for %s',
+                                    shape.label,
+                                )
+
+                    results.append((shape, angle))
+
+            # Store/update the compact viewpoint value in the tracked/detected
+            # rectangle itself.
             for item in results:
                 shape, angle = item[0], item[1]
+
                 if angle is not None:
-                    shape.other_data['viewpoint'] = angle
+                    shape.other_data['viewpoint'] = float(angle)
                 else:
                     shape.other_data.pop('viewpoint', None)
 
             if add_keypoints:
-                kpt_min_conf = float(vp_cfg.get('viewpoint_keypoint_min_conf', 0.15))
+                kpt_min_conf = float(
+                    vp_cfg.get('viewpoint_keypoint_min_conf', 0.15)
+                )
                 kpt_shapes = []
+
                 for shape, _angle, kpts in results:
                     for i, (kx, ky, kconf) in enumerate(kpts):
                         if kconf < kpt_min_conf:
                             continue
-                        kshape = Shape(label='{}_kpt_{}'.format(shape.label, i), shape_type='point', flags={})
+
+                        kshape = Shape(
+                            label='{}_kpt_{}'.format(shape.label, i),
+                            shape_type='point',
+                            flags={},
+                        )
                         kshape.addPoint(QtCore.QPointF(kx, ky))
                         kshape.flags['auto_flag'] = True
                         kshape.flags['viewpoint_keypoint'] = True
                         kpt_shapes.append(kshape)
+
                 if kpt_shapes:
                     self.loadShapes(kpt_shapes, replace=False)
 
-            # Persist using normal save path (respects output_dir/auto_save).
+            self.canvas.update()
+            return True
+
+        except Exception as e:
+            logger.exception('Viewpoint estimation failed')
+
+            if not silent:
+                self.errorMessage('Viewpoint Error', str(e))
+
+            return False
+
+    def estimateViewpoint(self):
+        if self.image.isNull() or not self.imagePath:
+            self.errorMessage('Viewpoint Error', 'Please open an image.')
+            return
+
+        shapes = self.canvas.selectedShapes or self.canvas.shapes
+
+        if not shapes:
+            self.errorMessage(
+                'Viewpoint Error',
+                'No annotated objects found.'
+            )
+            return
+
+        vp_cfg = self._loadViewpointConfig()
+        add_keypoints = bool(
+            vp_cfg.get('viewpoint_add_keypoints', False)
+        )
+
+        if self._estimateViewpointForShapes(
+            shapes,
+            silent=False,
+            add_keypoints=add_keypoints,
+        ):
+            # Save once, after the viewpoint values have been written.
             self.setDirty()
             self.canvas.update()
             self.status(self.tr('Viewpoint estimation finished'))
-        except Exception as e:
-            logger.exception('Viewpoint estimation failed')
-            self.errorMessage('Viewpoint Error', str(e))
 
     #def startStopAutoMode(self):
         #if self.autoMode:
